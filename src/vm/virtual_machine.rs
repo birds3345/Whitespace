@@ -236,22 +236,25 @@ impl<'a> VirtualMachine<'a> {
                 TokenType::Command(CommandType::ReadC) => {
                     let loc = self.get_stack(0)?;
 
+                    if loc < 0 {
+                        return Err(VMError::new("Heap index can not be negative"));
+                    }
+
                     let mut input: [u8; 1] = [0];
 
                     if let Err(_) = io::stdin().read_exact(&mut input) {
                         return Err(VMError::new("Could not read from user input"));
                     };
 
-                    if let Some(n) = self.stack.get_mut(loc as usize) {
-                        *n = input[0] as i32;
-                    }
-                    else {
-                        return Err(VMError::new("Address does not exist"));
-                    }
+                    self.heap.insert(loc as u32, input[0] as i32);
                 },
 
                 TokenType::Command(CommandType::ReadI) => {
                     let loc = self.get_stack(0)?;
+
+                    if loc < 0 {
+                        return Err(VMError::new("Heap index can not be negative"));
+                    }
 
                     let mut input = String::new();
 
@@ -260,12 +263,8 @@ impl<'a> VirtualMachine<'a> {
                     };
 
                     if let Ok(num) = input.trim().parse::<i32>() {
-                        if let Some(n) = self.stack.get_mut(loc as usize) {
-                            *n = num;
-                        }
-                        else {
-                            return Err(VMError::new("Address does not exist"));
-                        }
+                        self.heap.insert(loc as u32, num);
+
                     } else {
                         return Err(VMError::new(&format!("Could not read number {}", input)));
                     }
