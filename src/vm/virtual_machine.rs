@@ -226,7 +226,7 @@ impl<'a> VirtualMachine<'a> {
 
 
                 TokenType::Command(CommandType::OutC) => {
-                    print!("{}", self.pop_stack(0)? as u8 as char);
+                    print!("{}", char::from_u32(self.pop_stack(0)? as u32).unwrap());
                 },
 
                 TokenType::Command(CommandType::OutI) => {
