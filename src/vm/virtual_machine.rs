@@ -68,169 +68,169 @@ impl<'a> VirtualMachine<'a> {
                 return Err(VMError::new(&format!("Program pointer out of range (at {})", self.pointer)));
             };
 
-            match &self.collection[self.pointer].token_type {
-                TokenType::Command(CommandType::Push(n)) => {
+            match self.collection[self.pointer].token_type {
+                TokenType::Command(CommandType::Push(ref n)) => {
                     self.stack.push(*n);
                 },
 
                 TokenType::Command(CommandType::Dup) => {
-                    let n = self.get_stack(0)?;
-
-                    self.stack.push(n);
+                    self.stack.push(self.get_stack(0)?);
                 },
 
-                TokenType::Command(CommandType::Copy(n)) => {
-                    let n = self.get_stack(*n as usize)?;
-
-                    self.stack.push(n);
+                TokenType::Command(CommandType::Copy(ref n)) => {
+                    self.stack.push(self.get_stack(*n as usize)?);
                 },
 
                 TokenType::Command(CommandType::Swap) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
-
-                    self.stack.pop();
-                    self.stack.pop();
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
                     self.stack.push(n1);
                     self.stack.push(n2);
                 },
 
                 TokenType::Command(CommandType::Disc) => {
-                    self.get_stack(0)?;
-
-                    self.stack.pop();
+                    self.pop_stack(0)?;
                 },
 
-                TokenType::Command(CommandType::Slide(n)) => {
-                    let top = self.get_stack(0)?;
+                TokenType::Command(CommandType::Slide(ref n)) => {
+                    let n = *n;
 
-                    self.stack.pop();
+                    let top = self.pop_stack(0)?;
 
-                    for _ in 0..*n {
-                        self.get_stack(0)?;
-                        self.stack.pop();
-                    }
+                    for _ in 0..n {
+                        self.pop_stack(0)?;
+                    };
 
                     self.stack.push(top);
                 },
 
 
                 TokenType::Command(CommandType::Add) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
-                    self.stack.push(n1 + n2);
+                    self.stack.push(n2 + n1);
                 },
 
                 TokenType::Command(CommandType::Sub) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
-                    self.stack.push(n1 - n2);
+                    self.stack.push(n2 - n1);
                 },
 
                 TokenType::Command(CommandType::Mult) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
-                    self.stack.push(n1 * n2);
+                    self.stack.push(n2 * n1);
                 },
 
                 TokenType::Command(CommandType::IDiv) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
-                    self.stack.push(n1 / n2);
+                    self.stack.push(n2 / n1);
                 },
 
                 TokenType::Command(CommandType::Mod) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
 
-                    self.stack.push(n1 % n2);
+                    self.stack.push(n2 % n1);
                 },
 
 
                 TokenType::Command(CommandType::Store) => {
-                    let n1 = self.get_stack(0)?;
-                    let n2 = self.get_stack(1)?;
+                    let n1 = self.pop_stack(0)?;
+                    let n2 = self.pop_stack(0)?;
+                    
+                    if n2 < 0 {
+                        return Err(VMError::new("Heap index can not be negative"));
+                    };
+                    
+                    self.heap.insert(n2 as u32, n1);
+                },
 
+                TokenType::Command(CommandType::Retr) => {
+                    let n1 = self.pop_stack(0)?;
+                    
                     if n1 < 0 {
                         return Err(VMError::new("Heap index can not be negative"));
                     }
                     
-                    self.heap.insert(n1 as u32, n2);
-                },
-
-                TokenType::Command(CommandType::Retr) => {
-                    let n1 = self.get_stack(0)?;
-
-                    if n1 < 0 {
-                        return Err(VMError::new("Heap index can not be negative"));
-                    }
-
                     let res = self.heap.get(&(n1 as u32));
 
                     if let None = res {
-                        return Err(VMError::new(&format!("Heap index {} does not exist", n1)));
-                    }
+                        self.heap.insert(n1 as u32, 0);
 
-                    self.stack.push(*res.unwrap());
+                        self.stack.push(0);
+                    }
+                    else
+                    {
+                        self.stack.push(*res.unwrap());
+                    };
                 },
 
 
                 TokenType::Command(CommandType::Labl(_)) => {},
 
-                TokenType::Command(CommandType::Call(label)) => {
+                TokenType::Command(CommandType::Call(ref label)) => {
                     self.subroutine_stack.push(self.pointer);
 
-                    self.pointer = self.get_label(label)?;
+                    self.pointer = self.get_label(label)? + 1;
 
                     continue;
                 },
 
-                TokenType::Command(CommandType::Jump(label)) => {
-                    self.pointer = self.get_label(label)?;
+                TokenType::Command(CommandType::Jump(ref label)) => {
+                    //+ 1 because labels will attempt to skip commands if it's a subroutine
+                    self.pointer = self.get_label(label)? + 1;
 
                     continue;
                 },
 
-                TokenType::Command(CommandType::JumpZ(label)) => {
-                    if self.get_stack(0)? == 0 {
-                        self.pointer = self.get_label(label)?;
+                TokenType::Command(CommandType::JumpZ(ref label)) => {
+                    let label = label.clone();
+
+                    if self.pop_stack(0)? == 0 {
+                        self.pointer = self.get_label(&label)? + 1;
 
                         continue;
-                    }
+                    };
                 },
 
-                TokenType::Command(CommandType::JumpN(label)) => {
-                    if self.get_stack(0)? < 0 {
-                        self.pointer = self.get_label(label)?;
+                TokenType::Command(CommandType::JumpN(ref label)) => {
+                    let label = label.clone();
+                    
+                    if self.pop_stack(0)? < 0 {
+                        self.pointer = self.get_label(&label)? + 1;
 
                         continue;
-                    }
+                    };
                 },
 
                 TokenType::Command(CommandType::EndS) => {
-                    if let Some(addr) = self.subroutine_stack.get(self.subroutine_stack.len() - 1) {
-                        self.pointer = *addr;
+                    if let Some(addr) = self.subroutine_stack.pop() {
+                        //+ 1 so it doesn't jump to the call command
+                        self.pointer = addr + 1;
+                    };
 
-                        self.subroutine_stack.pop();
-                    }
+                    continue;
                 },
 
                 TokenType::Command(CommandType::EndP) => {
                     break;
-                }
+                },
 
 
                 TokenType::Command(CommandType::OutC) => {
-                    print!("{}", self.get_stack(0)? as u8 as char);
+                    print!("{}", self.pop_stack(0)? as u8 as char);
                 },
 
                 TokenType::Command(CommandType::OutI) => {
-                    print!("{}", self.get_stack(0)?);
+                    print!("{}", self.pop_stack(0)?);
                 },
 
                 TokenType::Command(CommandType::ReadC) => {
@@ -238,7 +238,7 @@ impl<'a> VirtualMachine<'a> {
 
                     if loc < 0 {
                         return Err(VMError::new("Heap index can not be negative"));
-                    }
+                    };
 
                     let mut input: [u8; 1] = [0];
 
@@ -254,7 +254,7 @@ impl<'a> VirtualMachine<'a> {
 
                     if loc < 0 {
                         return Err(VMError::new("Heap index can not be negative"));
-                    }
+                    };
 
                     let mut input = String::new();
 
@@ -267,7 +267,7 @@ impl<'a> VirtualMachine<'a> {
 
                     } else {
                         return Err(VMError::new(&format!("Could not read number {}", input)));
-                    }
+                    };
                 },
 
                 _ => {
@@ -299,6 +299,14 @@ impl<'a> VirtualMachine<'a> {
         }
 
         Ok(*res.unwrap())
+    }
+
+    fn pop_stack(&mut self, index: usize) -> Result<i32, VMError> {
+        let res = self.get_stack(index)?;
+
+        self.stack.pop();
+
+        return Ok(res);
     }
 
     fn get_label(&self, label: &str) -> Result<usize, VMError> {

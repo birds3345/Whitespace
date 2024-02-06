@@ -52,7 +52,7 @@ impl Parser {
             line: 1,
         };
 
-        obj.queue.retain(|&c| c.is_whitespace());
+        obj.queue.retain(|&c| c.is_whitespace() && c != '\r');
 
         return obj;
     }
@@ -65,6 +65,18 @@ impl Parser {
 
     fn read_number(&mut self) -> Result<i32, ParserError> {
         let mut bin = String::new();
+
+        let mut positive = true;
+
+        if let Some(c) = self.read_char() {
+            if c == ' ' {
+                positive = true;
+            } else if c == '\t' {
+                positive = false;
+            }
+
+            self.consume_char();
+        }
 
         while let Some(c) = self.read_char() {
             if c != ' ' && c != '\t' {break;};
@@ -84,9 +96,15 @@ impl Parser {
             return Err(ParserError::new("Source unexpectedly ended while parsing number"));
         };
 
+        if bin == "" {
+            return Ok(0);
+        };
+        
         if let Ok(res) = i32::from_str_radix(&bin, 2) {
-            Ok(res)
-        } else {Err(ParserError::new(&format!("Unable to parse number on line {}", self.line)))}
+            Ok(if positive {res} else {-res})
+        } else {
+            Err(ParserError::new(&format!("Unable to parse number on line {}", self.line)))
+        }
     }
 
     fn read_label(&mut self) -> Result<String, ParserError> {
